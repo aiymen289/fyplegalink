@@ -24,18 +24,33 @@ class RoleSelectionPage extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // App logo placeholder (optional)
+                const SizedBox(height: 20),
                 const Text(
-                  "Register as",
+                  "Choose a Role", // Name of the app
                   style: TextStyle(
-                    fontSize: 32,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    letterSpacing: 1.2,
+                    letterSpacing: 1.5,
                   ),
                 ),
-                const SizedBox(height: 40),
 
-                // Cards with gradient and shadow
+                const SizedBox(height: 30),
+
+                // Cards with icons & text
+                RoleCard(
+                  title: "Citizen",
+                  icon: Icons.person,
+                  gradientColors: [Colors.greenAccent, Colors.teal],
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const RegisterClient()));
+                  },
+                ),
+                const SizedBox(height: 20),
                 RoleCard(
                   title: "Lawyer",
                   icon: Icons.gavel,
@@ -45,18 +60,6 @@ class RoleSelectionPage extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                             builder: (_) => const RegisterLawyer()));
-                  },
-                ),
-                const SizedBox(height: 20),
-                RoleCard(
-                  title: "Client",
-                  icon: Icons.person,
-                  gradientColors: [Colors.greenAccent, Colors.teal],
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const RegisterClient()));
                   },
                 ),
                 const SizedBox(height: 20),
@@ -73,7 +76,6 @@ class RoleSelectionPage extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 30),
-
                 TextButton(
                   onPressed: () {
                     Navigator.push(context,
@@ -96,7 +98,7 @@ class RoleSelectionPage extends StatelessWidget {
   }
 }
 
-// Reusable Role Card Widget with gradient
+// Role Card Widget with icon on left, text on right
 class RoleCard extends StatelessWidget {
   final String title;
   final IconData icon;
@@ -116,32 +118,33 @@ class RoleCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 260,
-        padding: const EdgeInsets.symmetric(vertical: 18),
+        width: 280,
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: gradientColors,
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
               color: Colors.black45,
-              blurRadius: 15,
-              offset: const Offset(0, 6),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
             ),
           ],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 28, color: Colors.white),
-            const SizedBox(width: 12),
+            Icon(icon, size: 30, color: Colors.white),
+            const SizedBox(width: 15),
             Text(
               title,
               style: const TextStyle(
-                  color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold),
             ),
           ],
         ),

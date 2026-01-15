@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'lawyer_home_wrapper.dart';
@@ -20,41 +20,78 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _password = TextEditingController();
   String _selectedRole = 'client';
   bool _loading = false;
+  bool _obscurePassword = true; // Password toggle
 
   Future<void> _login() async {
     setState(() => _loading = true);
+
     try {
+      // 1️⃣ Firebase Auth Login
       final UserCredential userCred = await _auth.signInWithEmailAndPassword(
         email: _email.text.trim(),
         password: _password.text.trim(),
       );
 
       final String uid = userCred.user!.uid;
+
+      // 2️⃣ Firestore Role Document Check
       final DocumentSnapshot roleDoc =
           await _firestore.collection("${_selectedRole}s").doc(uid).get();
 
       if (!mounted) return;
 
-      if (roleDoc.exists) {
-        if (_selectedRole == 'lawyer') {
-          Navigator.pushReplacement(
-              context, MaterialPageRoute(builder: (_) =>LawyerHomeWrapper()));
-        } else if (_selectedRole == 'client') {
-          Navigator.pushReplacement(
-              context, MaterialPageRoute(builder: (_) => ClientHome()));
-        } else {
-          Navigator.pushReplacement(
-              context, MaterialPageRoute(builder: (_) => AdminHome()));
-        }
-      } else {
+      if (!roleDoc.exists) {
+        // User not registered
+        await _auth.signOut();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("No user found for this role.")),
+          const SnackBar(
+              content: Text("No user found for this role. Please register first.")),
         );
+        return;
       }
+
+      final data = roleDoc.data() as Map<String, dynamic>;
+
+      // 3️⃣ Check Approval for lawyer/client
+      if (_selectedRole == 'lawyer' && (data['isApproved'] != true)) {
+        await _auth.signOut();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  "Your account is not approved by admin yet. Please wait for approval.")),
+        );
+        return;
+      }
+
+      if (_selectedRole == 'client' && (data['isApproved'] != true)) {
+        await _auth.signOut();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  "Your client account is pending admin approval. Please wait.")),
+        );
+        return;
+      }
+
+      // ✅ Approved → Navigate to respective dashboard
+      if (_selectedRole == 'lawyer') {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => LawyerHomeWrapper()));
+      } else if (_selectedRole == 'client') {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => ClientHome()));
+      } else if (_selectedRole == 'admin') {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => AdminHome()));
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Login failed: ${e.message}")));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Login failed: $e")));
+          .showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -93,7 +130,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 40),
 
                   _buildTextField(_email, "Email"),
-                  _buildTextField(_password, "Password", obscure: true),
+                  _buildPasswordField(_password, "Password"),
 
                   const SizedBox(height: 20),
 
@@ -122,7 +159,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 30),
 
                   GestureDetector(
-                    onTap: _login,
+                    onTap: _loading ? null : _login,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: double.infinity,
@@ -194,6 +231,43 @@ class _LoginPageState extends State<LoginPage> {
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: Colors.purpleAccent),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🔹 Password Field with Eye Toggle
+  Widget _buildPasswordField(TextEditingController c, String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: TextField(
+        controller: c,
+        obscureText: _obscurePassword,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white70),
+          filled: true,
+          fillColor: Colors.grey.shade900,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white24),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.purpleAccent),
+          ),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _obscurePassword ? Icons.visibility_off : Icons.visibility,
+              color: Colors.white70,
+            ),
+            onPressed: () {
+              setState(() {
+                _obscurePassword = !_obscurePassword;
+              });
+            },
           ),
         ),
       ),

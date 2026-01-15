@@ -409,7 +409,7 @@ class _RegisterLawyerState extends State<RegisterLawyer> {
                 validator: (v) => v!.isEmpty ? "Required" : null),
             field(experienceC, "Experience (Years)"),
             DropdownButtonFormField(
-              value: selectedCity,
+              initialValue: selectedCity,
               dropdownColor: Colors.black,
               decoration: const InputDecoration(
                 labelText: "City",

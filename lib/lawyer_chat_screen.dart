@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-// Lawyer Chat Screen
+
 class LawyerChatScreen extends StatefulWidget {
   final String lawyerId;
   final String clientId;
@@ -30,17 +30,23 @@ class _LawyerChatScreenState extends State<LawyerChatScreen> {
   }
 
   void _setLawyerOnline(bool online) async {
-    await FirebaseFirestore.instance
-        .collection('lawyers')
-        .doc(widget.lawyerId)
-        .update({'isOnline': online});
+    try {
+      await FirebaseFirestore.instance
+          .collection('lawyers')
+          .doc(widget.lawyerId)
+          .update({'isOnline': online});
+    } catch (e) {
+      // Ignore if field doesn't exist yet
+    }
   }
 
   void _updateTyping(bool typing) async {
-    await FirebaseFirestore.instance
-        .collection('chats')
-        .doc(chatId)
-        .set({'lawyerTyping': typing}, SetOptions(merge: true));
+    try {
+      await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(chatId)
+          .set({'lawyerTyping': typing}, SetOptions(merge: true));
+    } catch (e) {}
   }
 
   Future<void> _sendMessage() async {
@@ -84,9 +90,13 @@ class _LawyerChatScreenState extends State<LawyerChatScreen> {
                   .doc(widget.clientId)
                   .snapshots(),
               builder: (context, snapshot) {
-                final isOnline = snapshot.hasData && snapshot.data!.exists
-                    ? (snapshot.data!.data() as Map<String, dynamic>)['isOnline'] ?? false
-                    : false;
+                bool isOnline = false;
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  final data = snapshot.data!.data() as Map<String, dynamic>?;
+                  if (data != null && data.containsKey('isOnline')) {
+                    isOnline = data['isOnline'] ?? false;
+                  }
+                }
                 return CircleAvatar(
                   radius: 5,
                   backgroundColor: isOnline ? Colors.green : Colors.grey,
@@ -99,7 +109,7 @@ class _LawyerChatScreenState extends State<LawyerChatScreen> {
       ),
       body: Column(
         children: [
-          // Messages
+          // Messages List
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -119,7 +129,8 @@ class _LawyerChatScreenState extends State<LawyerChatScreen> {
                   padding: const EdgeInsets.all(16),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    final msg = messages[index].data() as Map<String, dynamic>;
+                    final msg =
+                        messages[index].data() as Map<String, dynamic>? ?? {};
                     final isMe = msg['senderId'] == widget.lawyerId;
                     final seen = msg['seen'] ?? false;
 
@@ -134,7 +145,8 @@ class _LawyerChatScreenState extends State<LawyerChatScreen> {
                     }
 
                     return Align(
-                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment:
+                          isMe ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.all(12),
@@ -171,12 +183,15 @@ class _LawyerChatScreenState extends State<LawyerChatScreen> {
 
           // Typing indicator + input
           StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('chats').doc(chatId).snapshots(),
+            stream:
+                FirebaseFirestore.instance.collection('chats').doc(chatId).snapshots(),
             builder: (context, snapshot) {
               bool typing = false;
               if (snapshot.hasData && snapshot.data!.exists) {
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                typing = data['clientTyping'] ?? false;
+                final data = snapshot.data!.data() as Map<String, dynamic>?;
+                if (data != null && data.containsKey('clientTyping')) {
+                  typing = data['clientTyping'] ?? false;
+                }
               }
               return Column(
                 children: [
@@ -187,7 +202,8 @@ class _LawyerChatScreenState extends State<LawyerChatScreen> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           "Client is typing...",
-                          style: TextStyle(color: Colors.blue, fontStyle: FontStyle.italic),
+                          style: TextStyle(
+                              color: Colors.blue, fontStyle: FontStyle.italic),
                         ),
                       ),
                     ),

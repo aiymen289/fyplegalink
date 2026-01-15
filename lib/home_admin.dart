@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminHome extends StatelessWidget {
-  AdminHome({super.key});
+  const AdminHome({super.key});
 
   // VIEW IMAGE -----------------------
   void _viewImage(BuildContext context, String base64) {
@@ -90,7 +90,8 @@ class AdminHome extends StatelessWidget {
                   .where('isApproved', isEqualTo: false)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                if (!snapshot.hasData)
+                  return const Center(child: CircularProgressIndicator());
 
                 int pendingCount = snapshot.data!.docs.length;
 
@@ -106,7 +107,7 @@ class AdminHome extends StatelessWidget {
                           ? const Center(child: Text("No Pending Lawyers"))
                           : ListView(
                               children: snapshot.data!.docs.map((doc) {
-                                var d = doc.data() as Map<String, dynamic>;
+                                var d = doc.data();
                                 return Card(
                                   child: ListTile(
                                     title: Text(d['name']),
@@ -116,32 +117,39 @@ class AdminHome extends StatelessWidget {
                                       children: [
                                         if (d['cnicFrontBase64'] != null)
                                           IconButton(
-                                            icon: const Icon(Icons.credit_card, color: Colors.blue),
+                                            icon: const Icon(Icons.credit_card,
+                                                color: Colors.blue),
                                             tooltip: "CNIC Front",
-                                            onPressed: () =>
-                                                _viewImage(context, d['cnicFrontBase64']),
+                                            onPressed: () => _viewImage(
+                                                context, d['cnicFrontBase64']),
                                           ),
                                         if (d['cnicBackBase64'] != null)
                                           IconButton(
-                                            icon: const Icon(Icons.credit_card, color: Colors.orange),
+                                            icon: const Icon(Icons.credit_card,
+                                                color: Colors.orange),
                                             tooltip: "CNIC Back",
-                                            onPressed: () =>
-                                                _viewImage(context, d['cnicBackBase64']),
+                                            onPressed: () => _viewImage(
+                                                context, d['cnicBackBase64']),
                                           ),
                                         if (d['certificateBase64'] != null)
                                           IconButton(
-                                            icon: const Icon(Icons.school, color: Colors.purple),
+                                            icon: const Icon(Icons.school,
+                                                color: Colors.purple),
                                             tooltip: "Bar Council Certificate",
-                                            onPressed: () =>
-                                                _viewImage(context, d['certificateBase64']),
+                                            onPressed: () => _viewImage(context,
+                                                d['certificateBase64']),
                                           ),
                                         IconButton(
-                                          icon: const Icon(Icons.check, color: Colors.green),
-                                          onPressed: () => approve(context, 'lawyers', doc.id),
+                                          icon: const Icon(Icons.check,
+                                              color: Colors.green),
+                                          onPressed: () => approve(
+                                              context, 'lawyers', doc.id),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.close, color: Colors.red),
-                                          onPressed: () => reject(context, 'lawyers', doc.id),
+                                          icon: const Icon(Icons.close,
+                                              color: Colors.red),
+                                          onPressed: () => reject(
+                                              context, 'lawyers', doc.id),
                                         ),
                                       ],
                                     ),
@@ -162,7 +170,8 @@ class AdminHome extends StatelessWidget {
                   .where('isApproved', isEqualTo: false)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                if (!snapshot.hasData)
+                  return const Center(child: CircularProgressIndicator());
 
                 int pendingCount = snapshot.data!.docs.length;
 
@@ -178,7 +187,7 @@ class AdminHome extends StatelessWidget {
                           ? const Center(child: Text("No Pending Clients"))
                           : ListView(
                               children: snapshot.data!.docs.map((doc) {
-                                var d = doc.data() as Map<String, dynamic>;
+                                var d = doc.data();
                                 return Card(
                                   child: ListTile(
                                     title: Text(d['fullName']),
@@ -187,22 +196,30 @@ class AdminHome extends StatelessWidget {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          icon: const Icon(Icons.credit_card, color: Colors.blue),
+                                          icon: const Icon(Icons.credit_card,
+                                              color: Colors.blue),
                                           tooltip: "CNIC Front",
-                                          onPressed: () => _viewImage(context, d['cnicFrontBase64']),
+                                          onPressed: () => _viewImage(
+                                              context, d['cnicFrontBase64']),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.credit_card, color: Colors.orange),
+                                          icon: const Icon(Icons.credit_card,
+                                              color: Colors.orange),
                                           tooltip: "CNIC Back",
-                                          onPressed: () => _viewImage(context, d['cnicBackBase64']),
+                                          onPressed: () => _viewImage(
+                                              context, d['cnicBackBase64']),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.check, color: Colors.green),
-                                          onPressed: () => approve(context, 'clients', doc.id),
+                                          icon: const Icon(Icons.check,
+                                              color: Colors.green),
+                                          onPressed: () => approve(
+                                              context, 'clients', doc.id),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.close, color: Colors.red),
-                                          onPressed: () => reject(context, 'clients', doc.id),
+                                          icon: const Icon(Icons.close,
+                                              color: Colors.red),
+                                          onPressed: () => reject(
+                                              context, 'clients', doc.id),
                                         ),
                                       ],
                                     ),
