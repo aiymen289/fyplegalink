@@ -85,6 +85,7 @@ class RoleSelectionPage extends StatelessWidget {
                     "Already have an account? Login",
                     style: TextStyle(
                       color: Colors.white70,
+                      fontSize: 18,
                       decoration: TextDecoration.underline,
                     ),
                   ),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'lawyer_home_wrapper.dart';
@@ -20,13 +20,12 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _password = TextEditingController();
   String _selectedRole = 'client';
   bool _loading = false;
-  bool _obscurePassword = true; // Password toggle
+  bool _obscurePassword = true;
 
   Future<void> _login() async {
     setState(() => _loading = true);
 
     try {
-      // 1️⃣ Firebase Auth Login
       final UserCredential userCred = await _auth.signInWithEmailAndPassword(
         email: _email.text.trim(),
         password: _password.text.trim(),
@@ -34,46 +33,35 @@ class _LoginPageState extends State<LoginPage> {
 
       final String uid = userCred.user!.uid;
 
-      // 2️⃣ Firestore Role Document Check
       final DocumentSnapshot roleDoc =
           await _firestore.collection("${_selectedRole}s").doc(uid).get();
 
       if (!mounted) return;
 
       if (!roleDoc.exists) {
-        // User not registered
         await _auth.signOut();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text("No user found for this role. Please register first.")),
+              content:
+                  Text("No user found for this role. Please register first.")),
         );
         return;
       }
 
       final data = roleDoc.data() as Map<String, dynamic>;
 
-      // 3️⃣ Check Approval for lawyer/client
-      if (_selectedRole == 'lawyer' && (data['isApproved'] != true)) {
+      if ((_selectedRole == 'lawyer' || _selectedRole == 'client') &&
+          (data['isApproved'] != true)) {
         await _auth.signOut();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
               content: Text(
-                  "Your account is not approved by admin yet. Please wait for approval.")),
+                  "Your ${_selectedRole} account is pending admin approval. Please wait.")),
         );
         return;
       }
 
-      if (_selectedRole == 'client' && (data['isApproved'] != true)) {
-        await _auth.signOut();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  "Your client account is pending admin approval. Please wait.")),
-        );
-        return;
-      }
-
-      // ✅ Approved → Navigate to respective dashboard
+      // Navigate
       if (_selectedRole == 'lawyer') {
         Navigator.pushReplacement(
             context, MaterialPageRoute(builder: (_) => LawyerHomeWrapper()));
@@ -86,14 +74,36 @@ class _LoginPageState extends State<LoginPage> {
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Login failed: ${e.message}")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Login failed: ${e.message}")));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    if (_email.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter your email first.")));
+      return;
+    }
+
+    try {
+      await _auth.sendPasswordResetEmail(email: _email.text.trim());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              "Password reset email sent to ${_email.text.trim()}. Check your inbox."),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${e.message}")),
+      );
     }
   }
 
@@ -134,21 +144,24 @@ class _LoginPageState extends State<LoginPage> {
 
                   const SizedBox(height: 20),
 
+                  // 🔹 Bigger Role Dropdown
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: DropdownButton<String>(
                       value: _selectedRole,
                       dropdownColor: Colors.grey.shade800,
                       underline: const SizedBox(),
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
                       items: const [
-                        DropdownMenuItem(value: 'lawyer', child: Text('Lawyer')),
-                        DropdownMenuItem(value: 'client', child: Text('Client')),
+                        DropdownMenuItem(
+                            value: 'lawyer', child: Text('Lawyer')),
+                        DropdownMenuItem(
+                            value: 'client', child: Text('Client')),
                         DropdownMenuItem(value: 'admin', child: Text('Admin')),
                       ],
                       onChanged: (value) =>
@@ -179,7 +192,8 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       child: Center(
                         child: _loading
-                            ? const CircularProgressIndicator(color: Colors.white)
+                            ? const CircularProgressIndicator(
+                                color: Colors.white)
                             : const Text(
                                 "Login",
                                 style: TextStyle(
@@ -193,12 +207,14 @@ class _LoginPageState extends State<LoginPage> {
 
                   const SizedBox(height: 20),
 
+                  // 🔹 Bigger Forgot Password
                   TextButton(
-                    onPressed: () {},
+                    onPressed: _forgotPassword,
                     child: const Text(
                       "Forgot Password?",
                       style: TextStyle(
-                          color: Colors.white70,
+                          color: Colors.white,
+                          fontSize: 18,
                           decoration: TextDecoration.underline),
                     ),
                   ),
@@ -237,7 +253,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // 🔹 Password Field with Eye Toggle
   Widget _buildPasswordField(TextEditingController c, String label) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),

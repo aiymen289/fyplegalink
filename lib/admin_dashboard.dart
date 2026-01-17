@@ -173,8 +173,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   onTap: () => setState(() => selectedTab = 0),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    color:
-                        selectedTab == 0 ? Colors.deepPurple : Colors.black,
+                    color: selectedTab == 0 ? Colors.deepPurple : Colors.black,
                     child: const Center(
                       child: Text(
                         "Pending Lawyers",
@@ -189,8 +188,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   onTap: () => setState(() => selectedTab = 1),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    color:
-                        selectedTab == 1 ? Colors.deepPurple : Colors.black,
+                    color: selectedTab == 1 ? Colors.deepPurple : Colors.black,
                     child: const Center(
                       child: Text(
                         "Pending Clients",

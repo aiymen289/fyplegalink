@@ -66,7 +66,8 @@ class _RegisterClientState extends State<RegisterClient> {
   }
 
   Future<void> pickFront() async {
-    final r = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+    final r = await FilePicker.platform
+        .pickFiles(type: FileType.image, withData: true);
     if (r != null) {
       setState(() {
         cnicFront = r.files.first.bytes!;
@@ -76,7 +77,8 @@ class _RegisterClientState extends State<RegisterClient> {
   }
 
   Future<void> pickBack() async {
-    final r = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+    final r = await FilePicker.platform
+        .pickFiles(type: FileType.image, withData: true);
     if (r != null) {
       setState(() {
         cnicBack = r.files.first.bytes!;
@@ -107,7 +109,9 @@ class _RegisterClientState extends State<RegisterClient> {
   }
 
   Future<void> registerClient() async {
-    if (!_formKey.currentState!.validate() || cnicFront == null || cnicBack == null) {
+    if (!_formKey.currentState!.validate() ||
+        cnicFront == null ||
+        cnicBack == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Fill all fields & upload images")),
       );
@@ -142,8 +146,8 @@ class _RegisterClientState extends State<RegisterClient> {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Client Registered! Pending Approval")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Client Registered! Pending Approval")));
 
       Navigator.pushReplacement(
         context,
@@ -172,10 +176,10 @@ class _RegisterClientState extends State<RegisterClient> {
             InputDecoration(
               labelText: label,
               labelStyle: const TextStyle(color: Colors.white),
-              enabledBorder:
-                  const OutlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
-              focusedBorder:
-                  const OutlineInputBorder(borderSide: BorderSide(color: Colors.green)),
+              enabledBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white30)),
+              focusedBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.green)),
             ),
       ),
     );
@@ -228,7 +232,8 @@ class _RegisterClientState extends State<RegisterClient> {
           );
         } else {
           int leftStep = (index - 1) ~/ 2;
-          Color lineColor = leftStep < currentStep ? Colors.green : Colors.grey.shade600;
+          Color lineColor =
+              leftStep < currentStep ? Colors.green : Colors.grey.shade600;
           return SizedBox(
             width: 30,
             child: Divider(
@@ -247,8 +252,10 @@ class _RegisterClientState extends State<RegisterClient> {
       case 0:
         return Column(
           children: [
-            buildField(nameC, "Full Name", validator: (v) => v!.isEmpty ? "Required" : null),
-            buildField(emailC, "Email", validator: (v) => !v!.contains("@") ? "Invalid" : null),
+            buildField(nameC, "Full Name",
+                validator: (v) => v!.isEmpty ? "Required" : null),
+            buildField(emailC, "Email",
+                validator: (v) => !v!.contains("@") ? "Invalid" : null),
             buildField(
               passC,
               "Password",
@@ -262,12 +269,13 @@ class _RegisterClientState extends State<RegisterClient> {
               },
               decoration: const InputDecoration(
                 labelText: "Password",
-                hintText: "At least 8 chars, include number & special character",
+                hintText:
+                    "At least 8 chars, include number & special character",
                 labelStyle: TextStyle(color: Colors.white),
                 enabledBorder: OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.white30)),
-                focusedBorder:
-                    OutlineInputBorder(borderSide: BorderSide(color: Colors.green)),
+                focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.green)),
               ),
             ),
           ],
@@ -279,17 +287,20 @@ class _RegisterClientState extends State<RegisterClient> {
                 validator: (v) => v!.length != 15 ? "Invalid" : null,
                 onChanged: (v) {
                   cnicC.text = formatCNIC(v);
-                  cnicC.selection =
-                      TextSelection.fromPosition(TextPosition(offset: cnicC.text.length));
+                  cnicC.selection = TextSelection.fromPosition(
+                      TextPosition(offset: cnicC.text.length));
                 }),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: pickFront,
               style: ElevatedButton.styleFrom(
-                  backgroundColor: cnicFront != null ? Colors.green : Colors.deepPurple,
+                  backgroundColor:
+                      cnicFront != null ? Colors.green : Colors.deepPurple,
                   minimumSize: const Size(double.infinity, 50)),
               child: Text(
-                frontName == null ? "Upload CNIC Front" : "Front Selected: $frontName",
+                frontName == null
+                    ? "Upload CNIC Front"
+                    : "Front Selected: $frontName",
                 style: const TextStyle(color: Colors.white),
               ),
             ),
@@ -297,10 +308,13 @@ class _RegisterClientState extends State<RegisterClient> {
             ElevatedButton(
               onPressed: pickBack,
               style: ElevatedButton.styleFrom(
-                  backgroundColor: cnicBack != null ? Colors.green : Colors.deepPurple,
+                  backgroundColor:
+                      cnicBack != null ? Colors.green : Colors.deepPurple,
                   minimumSize: const Size(double.infinity, 50)),
               child: Text(
-                backName == null ? "Upload CNIC Back" : "Back Selected: $backName",
+                backName == null
+                    ? "Upload CNIC Back"
+                    : "Back Selected: $backName",
                 style: const TextStyle(color: Colors.white),
               ),
             ),
@@ -309,40 +323,40 @@ class _RegisterClientState extends State<RegisterClient> {
       case 2:
         return Column(
           children: [
-            buildField(phoneC, "Phone",
-                validator: (v) {
-                  if (!v!.startsWith("+92")) return "Must start with +92";
-                  if (v.length != 13) return "Invalid";
-                  return null;
-                },
-                onChanged: (v) {
-                  phoneC.text = formatPhone(v);
-                  phoneC.selection = TextSelection.fromPosition(
-                      TextPosition(offset: phoneC.text.length));
-                }),
+            buildField(phoneC, "Phone", validator: (v) {
+              if (!v!.startsWith("+92")) return "Must start with +92";
+              if (v.length != 13) return "Invalid";
+              return null;
+            }, onChanged: (v) {
+              phoneC.text = formatPhone(v);
+              phoneC.selection = TextSelection.fromPosition(
+                  TextPosition(offset: phoneC.text.length));
+            }),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: caseType,
+              initialValue: caseType,
               dropdownColor: Colors.black,
               decoration: const InputDecoration(
                 labelText: "Case Type",
                 labelStyle: TextStyle(color: Colors.white),
-                enabledBorder:
-                    OutlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
+                enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white30)),
                 focusedBorder: OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.green)),
               ),
               items: caseTypes
                   .map((c) => DropdownMenuItem(
                         value: c,
-                        child: Text(c, style: const TextStyle(color: Colors.white)),
+                        child: Text(c,
+                            style: const TextStyle(color: Colors.white)),
                       ))
                   .toList(),
               onChanged: (v) => setState(() => caseType = v),
               validator: (v) => v == null ? "Required" : null,
             ),
             const SizedBox(height: 12),
-            buildField(addressC, "Address", validator: (v) => v!.isEmpty ? "Required" : null),
+            buildField(addressC, "Address",
+                validator: (v) => v!.isEmpty ? "Required" : null),
             buildField(noteC, "Notes (optional)"),
           ],
         );
@@ -391,8 +405,8 @@ class _RegisterClientState extends State<RegisterClient> {
                       if (!validateStep(currentStep)) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content:
-                                  Text("Please fill all required fields correctly.")),
+                              content: Text(
+                                  "Please fill all required fields correctly.")),
                         );
                         return;
                       }
@@ -404,7 +418,8 @@ class _RegisterClientState extends State<RegisterClient> {
                         registerClient();
                       }
                     },
-                    icon: Icon(currentStep == 2 ? Icons.check : Icons.arrow_forward),
+                    icon: Icon(
+                        currentStep == 2 ? Icons.check : Icons.arrow_forward),
                     label: Text(currentStep == 2 ? "Submit" : "Next"),
                   ),
                 ],

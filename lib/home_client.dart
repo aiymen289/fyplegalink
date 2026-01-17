@@ -36,7 +36,7 @@ class _ClientHomeState extends State<ClientHome> {
         .listen((snapshot) {
       if (snapshot.docs.isNotEmpty) {
         for (var doc in snapshot.docs) {
-          final request = doc.data() as Map<String, dynamic>;
+          final request = doc.data();
           final status = request['status'] ?? 'pending';
 
           // Check if there's any pending/scheduled request
@@ -650,7 +650,7 @@ class _ClientHomeState extends State<ClientHome> {
   }
 
   Widget _buildLoadingAnimation() {
-    return Container(
+    return SizedBox(
       height: 60,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

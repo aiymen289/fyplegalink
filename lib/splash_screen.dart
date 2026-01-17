@@ -137,7 +137,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
             );
-          }).toList(),
+          }),
           // Center icon and text
           Center(
             child: Column(
