@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'register_lawyer.dart';
-import 'home_lawyer.dart';
+import 'lawyer_home_wrapper.dart';
 
 import 'register_client.dart';
 import 'home_client.dart';
@@ -30,10 +30,12 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
 
     // STEP 1 — Check if user is a lawyer
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('lawyers').doc(user.uid).get(),
+      future:
+          FirebaseFirestore.instance.collection('lawyers').doc(user.uid).get(),
       builder: (context, lawyerSnap) {
         if (lawyerSnap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
         }
 
         bool isLawyer = lawyerSnap.data != null && lawyerSnap.data!.exists;
@@ -67,8 +69,9 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          isLawyer ? const RegisterLawyer() : const RegisterClient(),
+                      builder: (_) => isLawyer
+                          ? const RegisterLawyer()
+                          : const RegisterClient(),
                     ),
                   );
                 });
@@ -88,7 +91,9 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => isLawyer ? const LawyerHome() : const ClientHome(),
+                    builder: (_) => isLawyer
+                        ? const LawyerHomeWrapper()
+                        : const ClientHome(),
                   ),
                 );
               });
@@ -112,7 +117,6 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
                     const Icon(Icons.access_time,
                         size: 80, color: Colors.amber),
                     const SizedBox(height: 20),
-
                     Text(
                       isLawyer
                           ? "Lawyer application is under review."
@@ -124,9 +128,7 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
                         color: Colors.white,
                       ),
                     ),
-
                     const SizedBox(height: 12),
-
                     Text(
                       "Please wait until admin approves your account.",
                       style: TextStyle(color: Colors.grey.shade400),

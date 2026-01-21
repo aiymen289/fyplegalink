@@ -27,7 +27,7 @@ class RoleSelectionPage extends StatelessWidget {
                 // App logo placeholder (optional)
                 const SizedBox(height: 20),
                 const Text(
-                  "Choose a Role", // Name of the app
+                  "Legal Connect", // Name of the app
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -35,51 +35,70 @@ class RoleSelectionPage extends StatelessWidget {
                     letterSpacing: 1.5,
                   ),
                 ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Choose Your Role",
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white70,
+                  ),
+                ),
 
                 const SizedBox(height: 30),
 
                 // Cards with icons & text
                 RoleCard(
-                  title: "Citizen",
+                  title: "Client",
+                  subtitle: "Get Legal Consultation",
                   icon: Icons.person,
                   gradientColors: [Colors.greenAccent, Colors.teal],
                   onTap: () {
                     Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const RegisterClient()));
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const RegisterClient(),
+                      ),
+                    );
                   },
                 ),
                 const SizedBox(height: 20),
                 RoleCard(
                   title: "Lawyer",
+                  subtitle: "Provide Legal Services",
                   icon: Icons.gavel,
                   gradientColors: [Colors.purpleAccent, Colors.deepPurple],
                   onTap: () {
                     Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const RegisterLawyer()));
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const RegisterLawyer(),
+                      ),
+                    );
                   },
                 ),
                 const SizedBox(height: 20),
                 RoleCard(
                   title: "Admin",
+                  subtitle: "Manage Platform",
                   icon: Icons.admin_panel_settings,
                   gradientColors: [Colors.orangeAccent, Colors.deepOrange],
                   onTap: () {
                     Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const RegisterAdmin()));
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const RegisterAdmin(),
+                      ),
+                    );
                   },
                 ),
 
                 const SizedBox(height: 30),
                 TextButton(
                   onPressed: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const LoginPage()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                    );
                   },
                   child: const Text(
                     "Already have an account? Login",
@@ -88,6 +107,14 @@ class RoleSelectionPage extends StatelessWidget {
                       fontSize: 18,
                       decoration: TextDecoration.underline,
                     ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "Version 1.0.0",
+                  style: TextStyle(
+                    color: Colors.white30,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -102,6 +129,7 @@ class RoleSelectionPage extends StatelessWidget {
 // Role Card Widget with icon on left, text on right
 class RoleCard extends StatelessWidget {
   final String title;
+  final String subtitle;
   final IconData icon;
   final List<Color> gradientColors;
   final VoidCallback onTap;
@@ -109,6 +137,7 @@ class RoleCard extends StatelessWidget {
   const RoleCard({
     super.key,
     required this.title,
+    required this.subtitle,
     required this.icon,
     required this.gradientColors,
     required this.onTap,
@@ -119,8 +148,8 @@ class RoleCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 280,
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        width: 300,
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: gradientColors,
@@ -138,15 +167,38 @@ class RoleCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 30, color: Colors.white),
-            const SizedBox(width: 15),
-            Text(
-              title,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 30, color: Colors.white),
             ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.white),
           ],
         ),
       ),
