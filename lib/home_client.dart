@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:typed_data';
+import 'dart:async';
 
 class ClientHome extends StatefulWidget {
   const ClientHome({super.key});
@@ -787,7 +788,7 @@ class _ClientHomeState extends State<ClientHome> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => ChatScreen(
+                                  builder: (context) => ClientChatScreen(
                                     clientId: clientId,
                                     lawyerId: pendingRequestLawyerId!,
                                     lawyerName:
@@ -1875,7 +1876,8 @@ class _ClientHomeState extends State<ClientHome> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => ChatScreen(
+                                            builder: (context) =>
+                                                ClientChatScreen(
                                               clientId: clientId,
                                               lawyerId:
                                                   request['assignedLawyerId'],
@@ -3036,13 +3038,13 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
   }
 }
 
-// ================= CHAT SCREEN =================
-class ChatScreen extends StatefulWidget {
+// ================= CLIENT CHAT SCREEN =================
+class ClientChatScreen extends StatefulWidget {
   final String clientId;
   final String lawyerId;
   final String lawyerName;
 
-  const ChatScreen({
+  const ClientChatScreen({
     super.key,
     required this.clientId,
     required this.lawyerId,
@@ -3050,44 +3052,145 @@ class ChatScreen extends StatefulWidget {
   });
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  State<ClientChatScreen> createState() => _ClientChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ClientChatScreenState extends State<ClientChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  String get chatId => "${widget.clientId}_${widget.lawyerId}";
+  final FocusNode _focusNode = FocusNode();
+  List<Map<String, dynamic>> _messages = [];
+  bool _isLawyerOnline = false;
+  bool _isLawyerTyping = false;
+  late String _chatId;
+  StreamSubscription<QuerySnapshot>? _messagesSubscription;
+  StreamSubscription<DocumentSnapshot>? _chatSubscription;
+  StreamSubscription<DocumentSnapshot>? _lawyerSubscription;
 
-  @override
-  void initState() {
-    super.initState();
-    _setClientOnline(true);
-    _updateRequestStatus();
-  }
-
-  void _updateRequestStatus() async {
-    try {
-      final requestDocId = "${widget.clientId}_${widget.lawyerId}";
-      await FirebaseFirestore.instance
-          .collection('client_requests')
-          .doc(requestDocId)
-          .update({
-        'status': 'accepted',
-        'acceptedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      print("Error updating request status: $e");
-    }
-  }
-
-  void _setClientOnline(bool online) async {
+  void _setClientOnline(bool isOnline) async {
     try {
       await FirebaseFirestore.instance
           .collection('clients')
           .doc(widget.clientId)
-          .update({'isOnline': online});
+          .set({
+        'isOnline': isOnline,
+        'lastSeen': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
     } catch (e) {
       print("Error setting client online: $e");
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _chatId = "${widget.clientId}_${widget.lawyerId}";
+    _setClientOnline(true);
+    _setupChatListeners();
+    _setupLawyerListener();
+    _markAllMessagesAsSeen();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+  }
+
+  void _setupChatListeners() {
+    // Listen to messages
+    _messagesSubscription = FirebaseFirestore.instance
+        .collection('chats')
+        .doc(_chatId)
+        .collection('messages')
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _messages = snapshot.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return {
+              'id': doc.id,
+              ...data,
+            };
+          }).toList();
+        });
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+
+        _markLawyerMessagesAsSeen();
+      }
+    });
+
+    // Listen to chat typing status
+    _chatSubscription = FirebaseFirestore.instance
+        .collection('chats')
+        .doc(_chatId)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted && snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>;
+        setState(() {
+          _isLawyerTyping = data['lawyerTyping'] ?? false;
+        });
+      }
+    });
+  }
+
+  void _setupLawyerListener() {
+    _lawyerSubscription = FirebaseFirestore.instance
+        .collection('lawyers')
+        .doc(widget.lawyerId)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted && snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>;
+        setState(() {
+          _isLawyerOnline = data['isOnline'] ?? false;
+        });
+      }
+    });
+  }
+
+  void _markAllMessagesAsSeen() async {
+    try {
+      final messagesSnapshot = await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(_chatId)
+          .collection('messages')
+          .where('senderId', isEqualTo: widget.lawyerId)
+          .where('seen', isEqualTo: false)
+          .get();
+
+      for (var doc in messagesSnapshot.docs) {
+        await FirebaseFirestore.instance
+            .collection('chats')
+            .doc(_chatId)
+            .collection('messages')
+            .doc(doc.id)
+            .update({'seen': true});
+      }
+    } catch (e) {
+      print("Error marking messages as seen: $e");
+    }
+  }
+
+  void _markLawyerMessagesAsSeen() async {
+    try {
+      for (var message in _messages) {
+        if (message['senderId'] == widget.lawyerId &&
+            !(message['seen'] ?? false)) {
+          await FirebaseFirestore.instance
+              .collection('chats')
+              .doc(_chatId)
+              .collection('messages')
+              .doc(message['id'])
+              .update({'seen': true});
+        }
+      }
+    } catch (e) {
+      print("Error marking lawyer messages: $e");
     }
   }
 
@@ -3095,7 +3198,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       await FirebaseFirestore.instance
           .collection('chats')
-          .doc(chatId)
+          .doc(_chatId)
           .set({'clientTyping': typing}, SetOptions(merge: true));
     } catch (e) {
       print("Error updating typing status: $e");
@@ -3107,34 +3210,86 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty) return;
 
     try {
+      // Update chat metadata
+      await FirebaseFirestore.instance.collection('chats').doc(_chatId).set({
+        'lawyerId': widget.lawyerId,
+        'clientId': widget.clientId,
+        'lawyerName': widget.lawyerName,
+        'clientName': 'Client',
+        'lastMessage': text,
+        'lastMessageTime': FieldValue.serverTimestamp(),
+        'unreadCount': FieldValue.increment(1),
+      }, SetOptions(merge: true));
+
+      // Send message
       await FirebaseFirestore.instance
           .collection('chats')
-          .doc(chatId)
+          .doc(_chatId)
           .collection('messages')
           .add({
         'senderId': widget.clientId,
+        'senderName': 'Client',
         'message': text,
         'timestamp': FieldValue.serverTimestamp(),
         'seen': false,
+        'type': 'text',
       });
 
       _messageController.clear();
       _updateTyping(false);
+      _focusNode.unfocus();
     } catch (e) {
       print("Error sending message: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error sending message: $e")),
+          SnackBar(
+            content: Text("Failed to send message"),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  String _formatTimestamp(Timestamp? timestamp) {
+    if (timestamp == null) return '';
+    final date = timestamp.toDate();
+    final now = DateTime.now();
+
+    if (date.day == now.day &&
+        date.month == now.month &&
+        date.year == now.year) {
+      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    }
+    return '${date.day}/${date.month} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   void dispose() {
+    _messagesSubscription?.cancel();
+    _chatSubscription?.cancel();
+    _lawyerSubscription?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
+
     _setClientOnline(false);
+
+    FirebaseFirestore.instance
+        .collection('chats')
+        .doc(_chatId)
+        .set({'clientTyping': false}, SetOptions(merge: true));
+
     super.dispose();
   }
 
@@ -3142,195 +3297,243 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('lawyers')
-              .doc(widget.lawyerId)
-              .snapshots(),
-          builder: (context, snapshot) {
-            final isOnline = snapshot.hasData && snapshot.data!.exists
-                ? (snapshot.data!.data() as Map<String, dynamic>)['isOnline'] ??
-                    false
-                : false;
-            return Row(
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white,
+              child: const Icon(
+                Icons.person,
+                size: 20,
+                color: Colors.teal,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.lawyerName),
-                const SizedBox(width: 8),
-                CircleAvatar(
-                  radius: 5,
-                  backgroundColor: isOnline ? Colors.green : Colors.grey,
+                Text(
+                  widget.lawyerName,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                Text(
+                  _isLawyerOnline ? 'Online' : 'Offline',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _isLawyerOnline ? Colors.green : Colors.grey,
+                  ),
                 ),
               ],
-            );
-          },
+            ),
+          ],
         ),
         backgroundColor: Colors.teal,
+        elevation: 0,
       ),
       body: Column(
         children: [
+          // Messages list
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('chats')
-                  .doc(chatId)
-                  .collection('messages')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
+            child: _messages.isEmpty
+                ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.chat, size: 60, color: Colors.grey),
-                        SizedBox(height: 20),
-                        Text(
-                          "No messages yet",
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          size: 80,
+                          color: Colors.grey.shade300,
                         ),
-                        SizedBox(height: 10),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No messages yet',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Text(
-                          "Start the conversation!",
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                          'Start conversation with ${widget.lawyerName}!',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade500,
+                          ),
                         ),
                       ],
                     ),
-                  );
-                }
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(8),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final message = _messages[index];
+                      final isMe = message['senderId'] == widget.clientId;
+                      final seen = message['seen'] ?? false;
+                      final timestamp = message['timestamp'] as Timestamp?;
 
-                final messages = snapshot.data!.docs;
-
-                return ListView.builder(
-                  reverse: true,
-                  controller: _scrollController,
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = messages[index].data() as Map<String, dynamic>;
-                    final isMe = msg['senderId'] == widget.clientId;
-                    final seen = msg['seen'] ?? false;
-
-                    if (!isMe && !seen) {
-                      FirebaseFirestore.instance
-                          .collection('chats')
-                          .doc(chatId)
-                          .collection('messages')
-                          .doc(messages[index].id)
-                          .update({'seen': true});
-                    }
-
-                    return Align(
-                      alignment:
-                          isMe ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(
-                            vertical: 4, horizontal: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isMe ? Colors.teal : Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: isMe
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisAlignment: isMe
+                              ? MainAxisAlignment.end
+                              : MainAxisAlignment.start,
                           children: [
-                            Text(
-                              msg['message'] ?? '',
-                              style: TextStyle(
-                                color: isMe ? Colors.white : Colors.black,
+                            if (!isMe)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: Colors.teal.shade100,
+                                  child: const Icon(
+                                    Icons.person,
+                                    size: 16,
+                                    color: Colors.teal,
+                                  ),
+                                ),
+                              ),
+                            Flexible(
+                              child: Container(
+                                constraints: BoxConstraints(
+                                  maxWidth:
+                                      MediaQuery.of(context).size.width * 0.7,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      isMe ? Colors.teal : Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      message['message'] ?? '',
+                                      style: TextStyle(
+                                        color:
+                                            isMe ? Colors.white : Colors.black,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          _formatTimestamp(timestamp),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: isMe
+                                                ? Colors.white.withOpacity(0.8)
+                                                : Colors.grey.shade600,
+                                          ),
+                                        ),
+                                        if (isMe) ...[
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            seen ? Icons.done_all : Icons.done,
+                                            size: 12,
+                                            color: seen
+                                                ? Colors.blue.shade200
+                                                : Colors.white.withOpacity(0.8),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            if (isMe)
-                              Icon(
-                                seen ? Icons.done_all : Icons.done,
-                                size: 12,
-                                color: seen ? Colors.blue : Colors.white,
-                              ),
                           ],
                         ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                      );
+                    },
+                  ),
           ),
-          StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('chats')
-                .doc(chatId)
-                .snapshots(),
-            builder: (context, snapshot) {
-              bool typing = false;
-              if (snapshot.hasData && snapshot.data!.exists) {
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                typing = data['lawyerTyping'] ?? false;
-              }
-              return Column(
-                children: [
-                  if (typing)
-                    const Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          "Lawyer is typing...",
-                          style: TextStyle(
-                              color: Colors.blue, fontStyle: FontStyle.italic),
-                        ),
-                      ),
-                    ),
-                  _buildInput(),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildInput() {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade300,
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              onChanged: (val) => _updateTyping(val.isNotEmpty),
-              decoration: InputDecoration(
-                hintText: "Type a message...",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
+          // Typing indicator
+          if (_isLawyerTyping)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Lawyer is typing...',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          CircleAvatar(
-            backgroundColor: Colors.teal,
-            child: IconButton(
-              icon: const Icon(Icons.send, color: Colors.white),
-              onPressed: _sendMessage,
+
+          // Input field
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Colors.grey.shade300)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            focusNode: _focusNode,
+                            onChanged: (value) {
+                              _updateTyping(value.isNotEmpty);
+                            },
+                            decoration: const InputDecoration(
+                              hintText: "Type a message...",
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            textCapitalization: TextCapitalization.sentences,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                CircleAvatar(
+                  backgroundColor: _messageController.text.trim().isNotEmpty
+                      ? Colors.teal
+                      : Colors.grey,
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white),
+                    onPressed: _messageController.text.trim().isNotEmpty
+                        ? _sendMessage
+                        : null,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

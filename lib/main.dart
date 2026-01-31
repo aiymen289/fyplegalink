@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:provider/provider.dart';
 import 'splash_screen.dart';
+import 'providers/language_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,11 +25,25 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'LegaLink',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(),
-      home: SplashScreen(),
+    return ChangeNotifierProvider(
+      create: (context) => LanguageProvider(),
+      child: Consumer<LanguageProvider>(
+        builder: (context, languageProvider, child) {
+          // Initialize language on app start
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            languageProvider.loadSavedLanguage();
+          });
+
+          return MaterialApp(
+            title: 'LegaLink',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData.dark().copyWith(
+              scaffoldBackgroundColor: Colors.black,
+            ),
+            home: SplashScreen(),
+          );
+        },
+      ),
     );
   }
 }

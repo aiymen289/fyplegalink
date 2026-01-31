@@ -1,24 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:math';
 import 'role_selection.dart';
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Legalink',
-      home: const SplashScreen(),
-    );
-  }
-}
+import '../providers/language_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -86,19 +71,42 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Navigate after 5 seconds
-    Timer(const Duration(seconds: 5), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const RoleSelectionPage()),
-      );
+    // Initialize language provider and navigate
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        // Access language provider
+        final languageProvider =
+            Provider.of<LanguageProvider>(context, listen: false);
+
+        // Load saved language settings
+        await languageProvider.loadSavedLanguage();
+
+        // Wait for 5 seconds total (3 seconds for animation + 2 seconds buffer)
+        await Future.delayed(const Duration(seconds: 3));
+
+        // Navigate to role selection
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const RoleSelectionPage()),
+        );
+      } catch (e) {
+        print('Error in splash screen: $e');
+        // Fallback navigation
+        await Future.delayed(const Duration(seconds: 5));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const RoleSelectionPage()),
+        );
+      }
     });
   }
 
   @override
   void dispose() {
     _controller.dispose();
-    textTimer.cancel();
+    if (textTimer.isActive) {
+      textTimer.cancel();
+    }
     super.dispose();
   }
 
