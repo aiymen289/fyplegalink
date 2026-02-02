@@ -20,7 +20,6 @@ class _ClientHomeState extends State<ClientHome> {
   late String clientEmail;
   late String clientName;
   late String clientPhone;
-  String? pendingRequestLawyerId;
   Map<String, dynamic>? activeRequestData;
   bool _hasPaidConsultation = false;
   bool _isDrawerOpen = false;
@@ -34,6 +33,12 @@ class _ClientHomeState extends State<ClientHome> {
   List<Map<String, dynamic>> _payments = [];
   String _paymentStatus = 'none'; // 'none', 'pending', 'approved', 'rejected'
   String? _approvedPaymentId;
+
+  // Track which lawyers have pending/active requests
+  Map<String, String> _lawyerRequestStatus = {}; // lawyerId -> status
+  List<String> _pendingLawyerIds = [];
+  List<String> _acceptedLawyerIds = [];
+  List<String> _scheduledLawyerIds = [];
 
   final List<Map<String, dynamic>> _menuItems = [
     {'icon': Icons.dashboard, 'title': 'Dashboard', 'index': 0},
@@ -188,14 +193,14 @@ class _ClientHomeState extends State<ClientHome> {
         return {'id': doc.id, ...data};
       }).toList();
 
-      // Find active request
+      // Update lawyer request status tracking
+      _updateLawyerRequestStatus();
+
+      // Find active request for chat
       for (var request in _myRequests) {
         final status = request['status'] ?? 'pending';
-        if (status == 'pending' ||
-            status == 'scheduled' ||
-            status == 'accepted') {
+        if (status == 'accepted') {
           setState(() {
-            pendingRequestLawyerId = request['assignedLawyerId'];
             activeRequestData = request;
           });
           break;
@@ -203,6 +208,28 @@ class _ClientHomeState extends State<ClientHome> {
       }
     } catch (e) {
       print("Error loading my requests: $e");
+    }
+  }
+
+  void _updateLawyerRequestStatus() {
+    _lawyerRequestStatus.clear();
+    _pendingLawyerIds.clear();
+    _acceptedLawyerIds.clear();
+    _scheduledLawyerIds.clear();
+
+    for (var request in _myRequests) {
+      final lawyerId = request['assignedLawyerId'];
+      final status = request['status'] ?? 'pending';
+
+      _lawyerRequestStatus[lawyerId] = status;
+
+      if (status == 'pending') {
+        _pendingLawyerIds.add(lawyerId);
+      } else if (status == 'accepted') {
+        _acceptedLawyerIds.add(lawyerId);
+      } else if (status == 'scheduled') {
+        _scheduledLawyerIds.add(lawyerId);
+      }
     }
   }
 
@@ -270,7 +297,10 @@ class _ClientHomeState extends State<ClientHome> {
         // If payment was approved but now not, clear requests
         if (!_hasPaidConsultation && hadPaidBefore) {
           _myRequests.clear();
-          pendingRequestLawyerId = null;
+          _lawyerRequestStatus.clear();
+          _pendingLawyerIds.clear();
+          _acceptedLawyerIds.clear();
+          _scheduledLawyerIds.clear();
           activeRequestData = null;
         }
 
@@ -292,15 +322,14 @@ class _ClientHomeState extends State<ClientHome> {
               return {'id': doc.id, ...data};
             }).toList();
 
-            // Update active request
-            pendingRequestLawyerId = null;
+            // Update lawyer request status tracking
+            _updateLawyerRequestStatus();
+
+            // Update active request for chat
             activeRequestData = null;
             for (var request in _myRequests) {
               final status = request['status'] ?? 'pending';
-              if (status == 'pending' ||
-                  status == 'scheduled' ||
-                  status == 'accepted') {
-                pendingRequestLawyerId = request['assignedLawyerId'];
+              if (status == 'accepted') {
                 activeRequestData = request;
                 break;
               }
@@ -659,10 +688,10 @@ class _ClientHomeState extends State<ClientHome> {
                         ),
                         const SizedBox(width: 15),
                         _buildDashboardStat(
-                          'Active Requests',
-                          pendingRequestLawyerId != null ? '1' : '0',
-                          Icons.request_page,
-                          pendingRequestLawyerId != null
+                          'Active Chats',
+                          _acceptedLawyerIds.length.toString(),
+                          Icons.chat,
+                          _acceptedLawyerIds.isNotEmpty
                               ? Colors.blue
                               : Colors.grey,
                         ),
@@ -671,8 +700,10 @@ class _ClientHomeState extends State<ClientHome> {
                           'Available Lawyers',
                           _hasPaidConsultation
                               ? _allLawyers
-                                  .where(
-                                      (lawyer) => lawyer['isApproved'] == true)
+                                  .where((lawyer) =>
+                                      lawyer['isApproved'] == true &&
+                                      !_lawyerRequestStatus
+                                          .containsKey(lawyer['id']))
                                   .length
                                   .toString()
                               : 'Locked',
@@ -746,9 +777,7 @@ class _ClientHomeState extends State<ClientHome> {
               ],
             ),
             const SizedBox(height: 20),
-            if (pendingRequestLawyerId != null &&
-                activeRequestData != null &&
-                _hasPaidConsultation)
+            if (_acceptedLawyerIds.isNotEmpty && activeRequestData != null)
               Card(
                 elevation: 4,
                 shape: RoundedRectangleBorder(
@@ -760,7 +789,7 @@ class _ClientHomeState extends State<ClientHome> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Active Request Status',
+                        'Active Chat',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -774,36 +803,31 @@ class _ClientHomeState extends State<ClientHome> {
                           activeRequestData?['lawyerName'] ?? 'Unknown Lawyer',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        subtitle: Text(
-                          'Status: ${activeRequestData?['status']?.toUpperCase() ?? 'PENDING'}',
+                        subtitle: const Text(
+                          'Status: ACCEPTED',
                           style: TextStyle(
-                            color: _getStatusColor(
-                                activeRequestData?['status'] ?? 'pending'),
+                            color: Colors.green,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         trailing: ElevatedButton(
                           onPressed: () {
-                            if (activeRequestData?['status'] == 'accepted') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ClientChatScreen(
-                                    clientId: clientId,
-                                    lawyerId: pendingRequestLawyerId!,
-                                    lawyerName:
-                                        activeRequestData?['lawyerName'] ??
-                                            'Unknown',
-                                  ),
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ClientChatScreen(
+                                  clientId: clientId,
+                                  lawyerId:
+                                      activeRequestData!['assignedLawyerId'],
+                                  lawyerName:
+                                      activeRequestData?['lawyerName'] ??
+                                          'Unknown',
                                 ),
-                              );
-                            }
+                              ),
+                            );
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                activeRequestData?['status'] == 'accepted'
-                                    ? Colors.green
-                                    : Colors.grey,
+                            backgroundColor: Colors.green,
                           ),
                           child: const Text(
                             'Chat',
@@ -811,6 +835,51 @@ class _ClientHomeState extends State<ClientHome> {
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            if (_pendingLawyerIds.isNotEmpty)
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Pending Requests',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ..._pendingLawyerIds.map((lawyerId) {
+                        final request = _myRequests.firstWhere(
+                          (req) => req['assignedLawyerId'] == lawyerId,
+                          orElse: () => {},
+                        );
+                        return ListTile(
+                          leading:
+                              const Icon(Icons.person, color: Colors.orange),
+                          title: Text(
+                            request['lawyerName'] ?? 'Lawyer',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: const Text(
+                            'Status: PENDING',
+                            style: TextStyle(
+                              color: Colors.orange,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ],
                   ),
                 ),
@@ -1223,9 +1292,11 @@ class _ClientHomeState extends State<ClientHome> {
       return _buildPaymentRequiredScreen();
     }
 
-    // Client-side filtering for approved lawyers
-    final approvedLawyers = _allLawyers.where((lawyer) {
-      return lawyer['isApproved'] == true;
+    // Filter approved lawyers and exclude those with existing requests
+    final availableLawyers = _allLawyers.where((lawyer) {
+      final lawyerId = lawyer['id'];
+      return lawyer['isApproved'] == true &&
+          !_lawyerRequestStatus.containsKey(lawyerId);
     }).toList();
 
     return Column(
@@ -1273,38 +1344,60 @@ class _ClientHomeState extends State<ClientHome> {
               ),
               const SizedBox(height: 5),
               Text(
-                "${approvedLawyers.length} approved lawyer${approvedLawyers.length != 1 ? 's' : ''} found",
+                "${availableLawyers.length} available lawyer${availableLawyers.length != 1 ? 's' : ''} found",
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.white.withOpacity(0.9),
                 ),
               ),
+              if (_acceptedLawyerIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text(
+                    "You have ${_acceptedLawyerIds.length} active chat${_acceptedLawyerIds.length != 1 ? 's' : ''}",
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
         Expanded(
-          child: approvedLawyers.isEmpty
-              ? const Center(
+          child: availableLawyers.isEmpty
+              ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.people_outline, size: 80, color: Colors.grey),
                       SizedBox(height: 20),
                       Text(
-                        "No approved lawyers available yet.",
+                        _acceptedLawyerIds.isNotEmpty
+                            ? "You have active chats with all available lawyers"
+                            : "No available lawyers at the moment",
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.grey,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                       SizedBox(height: 10),
-                      Text(
-                        "Check back later for available lawyers",
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
+                      if (_acceptedLawyerIds.isNotEmpty)
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedIndex = 3;
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                          ),
+                          child: Text(
+                            'View My Chats (${_acceptedLawyerIds.length})',
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 )
@@ -1314,9 +1407,9 @@ class _ClientHomeState extends State<ClientHome> {
                   },
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: approvedLawyers.length,
+                    itemCount: availableLawyers.length,
                     itemBuilder: (context, index) {
-                      final lawyer = approvedLawyers[index];
+                      final lawyer = availableLawyers[index];
                       final lawyerId = lawyer['id'];
                       final isOnline = lawyer['isOnline'] ?? false;
                       final specialization =
@@ -1325,6 +1418,11 @@ class _ClientHomeState extends State<ClientHome> {
                           lawyer['experience'] ?? 'Not specified';
                       final name = lawyer['name'] ?? 'No Name';
                       final email = lawyer['email'] ?? 'No Email';
+
+                      // Check if client already has a request with this lawyer
+                      final hasExistingRequest =
+                          _lawyerRequestStatus.containsKey(lawyerId);
+                      final existingStatus = _lawyerRequestStatus[lawyerId];
 
                       return Card(
                         elevation: 3,
@@ -1391,22 +1489,47 @@ class _ClientHomeState extends State<ClientHome> {
                                       ],
                                     ),
                                   ),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      _showRequestOptions(
-                                          context, lawyerId, lawyer);
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.teal,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                  if (hasExistingRequest)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: _getStatusColor(existingStatus!)
+                                            .withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color:
+                                              _getStatusColor(existingStatus),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        existingStatus.toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color:
+                                              _getStatusColor(existingStatus),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        _showRequestOptions(
+                                            context, lawyerId, lawyer);
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.teal,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Connect',
+                                        style: TextStyle(color: Colors.white),
                                       ),
                                     ),
-                                    child: const Text(
-                                      'Connect',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ),
                                 ],
                               ),
                               const SizedBox(height: 15),
@@ -1539,6 +1662,42 @@ class _ClientHomeState extends State<ClientHome> {
   Future<void> _sendRequestToLawyer(
       String lawyerId, Map<String, dynamic> lawyer) async {
     try {
+      // Check if client already has a pending/accepted request with this lawyer
+      if (_lawyerRequestStatus.containsKey(lawyerId)) {
+        final existingStatus = _lawyerRequestStatus[lawyerId];
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'You already have a $existingStatus request with this lawyer'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check if client already has an accepted chat
+      if (_acceptedLawyerIds.isNotEmpty) {
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Active Chat Exists'),
+              content: const Text(
+                  'You already have an active chat. You can only chat with one lawyer at a time.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
       final requestDocId = "${clientId}_$lawyerId";
 
       await FirebaseFirestore.instance
@@ -1548,6 +1707,7 @@ class _ClientHomeState extends State<ClientHome> {
         'clientId': clientId,
         'clientName': clientName,
         'clientEmail': clientEmail,
+        'clientPhone': clientPhone,
         'assignedLawyerId': lawyerId,
         'lawyerName': lawyer['name'] ?? 'Unknown',
         'lawyerEmail': lawyer['email'] ?? 'Unknown',
@@ -1577,13 +1737,12 @@ class _ClientHomeState extends State<ClientHome> {
           'timestamp': Timestamp.now(),
         });
 
+        // Update tracking
+        _lawyerRequestStatus[lawyerId] = 'pending';
+        _pendingLawyerIds.add(lawyerId);
+
         setState(() {
-          pendingRequestLawyerId = lawyerId;
-          activeRequestData = {
-            'status': 'pending',
-            'lawyerName': lawyer['name'] ?? 'Unknown',
-          };
-          _selectedIndex = 3;
+          _selectedIndex = 3; // Navigate to My Requests
         });
       }
     } catch (e) {
@@ -1611,6 +1770,7 @@ class _ClientHomeState extends State<ClientHome> {
           final data = doc.data() as Map<String, dynamic>;
           return {'id': doc.id, ...data};
         }).toList();
+        _updateLawyerRequestStatus();
       });
     } catch (e) {
       print("Error refreshing requests: $e");
@@ -1625,29 +1785,29 @@ class _ClientHomeState extends State<ClientHome> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.lock, size: 80, color: Colors.orange),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             Text(
               _paymentStatus == 'pending'
                   ? "Payment Pending Approval"
                   : "Payment Required",
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: Colors.orange,
               ),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Text(
               _paymentStatus == 'pending'
                   ? "Your payment is under review by admin. Please wait for approval."
                   : "You need to have an approved payment\nto send requests to lawyers",
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey,
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             if (_paymentStatus != 'pending')
               ElevatedButton(
                 onPressed: _showPaymentDialog,
@@ -1671,265 +1831,285 @@ class _ClientHomeState extends State<ClientHome> {
       return (timeB as Timestamp).compareTo(timeA as Timestamp);
     });
 
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.teal.shade400, Colors.teal.shade700],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+    // Group requests by status
+    final pendingRequests =
+        _myRequests.where((req) => req['status'] == 'pending').toList();
+    final acceptedRequests =
+        _myRequests.where((req) => req['status'] == 'accepted').toList();
+    final scheduledRequests =
+        _myRequests.where((req) => req['status'] == 'scheduled').toList();
+    final otherRequests = _myRequests
+        .where((req) =>
+            req['status'] != 'pending' &&
+            req['status'] != 'accepted' &&
+            req['status'] != 'scheduled')
+        .toList();
+
+    return DefaultTabController(
+      length: 4,
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.teal.shade400, Colors.teal.shade700],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.request_page, color: Colors.white, size: 30),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "My Requests",
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            "${_myRequests.length} total request${_myRequests.length != 1 ? 's' : ''}",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 10),
+                TabBar(
+                  tabs: const [
+                    Tab(text: 'Active'),
+                    Tab(text: 'Pending'),
+                    Tab(text: 'Scheduled'),
+                    Tab(text: 'Others'),
+                  ],
+                  indicatorColor: Colors.white,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  isScrollable: true,
+                ),
+              ],
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.verified, color: Colors.white, size: 30),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "My Consultation Requests",
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const Text(
-                          "Your payment is approved - Connect with lawyers",
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Color.fromRGBO(255, 255, 255, 0.9),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Text(
-                "${_myRequests.length} request${_myRequests.length != 1 ? 's' : ''} found",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.9),
-                ),
-              ),
-            ],
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildRequestList(acceptedRequests, 'Active Chats'),
+                _buildRequestList(pendingRequests, 'Pending Requests'),
+                _buildRequestList(scheduledRequests, 'Scheduled Sessions'),
+                _buildRequestList(otherRequests, 'Other Requests'),
+              ],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequestList(List<Map<String, dynamic>> requests, String title) {
+    if (requests.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              title.contains('Active')
+                  ? Icons.chat
+                  : title.contains('Pending')
+                      ? Icons.notifications_off
+                      : title.contains('Scheduled')
+                          ? Icons.calendar_today
+                          : Icons.history,
+              size: 80,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 20),
+            Text(
+              title.contains('Active')
+                  ? "No active chats"
+                  : title.contains('Pending')
+                      ? "No pending requests"
+                      : title.contains('Scheduled')
+                          ? "No scheduled sessions"
+                          : "No other requests",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+          ],
         ),
-        Expanded(
-          child: _myRequests.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _refreshRequests();
+      },
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: requests.length,
+        itemBuilder: (context, index) {
+          final request = requests[index];
+          final requestId = request['id'];
+          final status = request['status'] ?? 'pending';
+          final lawyerName = request['lawyerName'] ?? 'Unknown';
+          final timestamp = request['timestamp'] as Timestamp?;
+          final scheduledDate = request['scheduledDate'];
+          final scheduledTime = request['scheduledTime'];
+
+          return Card(
+            elevation: 3,
+            margin: const EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.request_page,
-                          size: 80, color: Colors.grey),
-                      const SizedBox(height: 20),
-                      const Text(
-                        "No requests yet",
-                        style: TextStyle(
+                      Text(
+                        lawyerName,
+                        style: const TextStyle(
                           fontSize: 18,
-                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 5),
-                      const Text(
-                        "Connect with a lawyer to get started",
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(status).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _getStatusColor(status),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _selectedIndex = 2;
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal,
-                        ),
-                        child: const Text(
-                          'Browse Lawyers',
-                          style: TextStyle(color: Colors.white),
+                        child: Text(
+                          status.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _getStatusColor(status),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () async {
-                    await _refreshRequests();
-                  },
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _myRequests.length,
-                    itemBuilder: (context, index) {
-                      final request = _myRequests[index];
-                      final requestId = request['id'];
-                      final status = request['status'] ?? 'pending';
-                      final lawyerName = request['lawyerName'] ?? 'Unknown';
-                      final timestamp = request['timestamp'] as Timestamp?;
-                      final scheduledDate = request['scheduledDate'];
-                      final scheduledTime = request['scheduledTime'];
-
-                      return Card(
-                        elevation: 3,
-                        margin: const EdgeInsets.only(bottom: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.email,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(width: 5),
+                      Text(
+                        request['lawyerEmail'] ?? 'No email',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    lawyerName,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: _getStatusColor(status)
-                                          .withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: _getStatusColor(status),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      status.toUpperCase(),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: _getStatusColor(status),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.email,
-                                    size: 16,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    request['lawyerEmail'] ?? 'No email',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (scheduledDate != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 10),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.calendar_today,
-                                        size: 16,
-                                        color: Colors.blue,
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        'Scheduled: ${_formatDate(scheduledDate)} ${scheduledTime != null ? 'at $scheduledTime' : ''}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.blue,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                      ),
+                    ],
+                  ),
+                  if (scheduledDate != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 16,
+                            color: Colors.blue,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Scheduled: ${_formatDate(scheduledDate)} ${scheduledTime != null ? 'at $scheduledTime' : ''}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.blue,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      if (status == 'accepted')
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ClientChatScreen(
+                                  clientId: clientId,
+                                  lawyerId: request['assignedLawyerId'],
+                                  lawyerName: lawyerName,
                                 ),
-                              const SizedBox(height: 15),
-                              Row(
-                                children: [
-                                  if (status == 'accepted')
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                ClientChatScreen(
-                                              clientId: clientId,
-                                              lawyerId:
-                                                  request['assignedLawyerId'],
-                                              lawyerName: lawyerName,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                      ),
-                                      child: const Text(
-                                        'Start Chat',
-                                        style: TextStyle(color: Colors.white),
-                                      ),
-                                    ),
-                                  if (status == 'pending' ||
-                                      status == 'scheduled')
-                                    OutlinedButton(
-                                      onPressed: () {
-                                        _showCancelRequestDialog(
-                                            requestId, lawyerName);
-                                      },
-                                      style: OutlinedButton.styleFrom(
-                                        side:
-                                            const BorderSide(color: Colors.red),
-                                      ),
-                                      child: const Text(
-                                        'Cancel',
-                                        style: TextStyle(color: Colors.red),
-                                      ),
-                                    ),
-                                  const Spacer(),
-                                  if (timestamp != null)
-                                    Text(
-                                      _formatDate(timestamp),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                ],
                               ),
-                            ],
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          child: const Text(
+                            'Open Chat',
+                            style: TextStyle(color: Colors.white),
                           ),
                         ),
-                      );
-                    },
+                      if (status == 'pending' || status == 'scheduled')
+                        OutlinedButton(
+                          onPressed: () {
+                            _showCancelRequestDialog(requestId, lawyerName);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.red),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      Spacer(),
+                      if (timestamp != null)
+                        Text(
+                          _formatDate(timestamp),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-        ),
-      ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -2005,27 +2185,27 @@ class _ClientHomeState extends State<ClientHome> {
                 size: 100,
                 color: Colors.orange[700],
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               Text(
                 _paymentStatus == 'pending'
                     ? "Payment Pending Approval"
                     : "Consultation Fee Required",
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: Colors.teal,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               Text(
                 _paymentStatus == 'pending'
                     ? "Your payment is under review by admin. Please wait for approval."
                     : "To connect with lawyers and get legal advice, you need to pay the consultation fee first.",
-                style: const TextStyle(fontSize: 16, color: Colors.grey),
+                style: TextStyle(fontSize: 16, color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 30),
+              SizedBox(height: 30),
               Card(
                 elevation: 5,
                 shape: RoundedRectangleBorder(
@@ -2035,7 +2215,7 @@ class _ClientHomeState extends State<ClientHome> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      const Text(
+                      Text(
                         "Consultation Fee",
                         style: TextStyle(
                           fontSize: 20,
@@ -2043,7 +2223,7 @@ class _ClientHomeState extends State<ClientHome> {
                           color: Colors.teal,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      SizedBox(height: 10),
                       Text(
                         "Rs. 2,000",
                         style: TextStyle(
@@ -2052,8 +2232,8 @@ class _ClientHomeState extends State<ClientHome> {
                           color: Colors.green[700],
                         ),
                       ),
-                      const SizedBox(height: 15),
-                      const Text(
+                      SizedBox(height: 15),
+                      Text(
                         "Once payment is approved by admin, you can:\n• Connect with any lawyer\n• Send chat requests\n• Get legal consultation",
                         style: TextStyle(color: Colors.grey),
                         textAlign: TextAlign.center,
@@ -2063,12 +2243,12 @@ class _ClientHomeState extends State<ClientHome> {
                           padding: const EdgeInsets.only(top: 15),
                           child: Row(
                             children: [
-                              const Icon(Icons.info, color: Colors.blue),
-                              const SizedBox(width: 10),
+                              Icon(Icons.info, color: Colors.blue),
+                              SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   "Payment submitted on: ${_getLatestPaymentDate()}",
-                                  style: const TextStyle(color: Colors.blue),
+                                  style: TextStyle(color: Colors.blue),
                                 ),
                               ),
                             ],
@@ -2078,7 +2258,7 @@ class _ClientHomeState extends State<ClientHome> {
                   ),
                 ),
               ),
-              const SizedBox(height: 30),
+              SizedBox(height: 30),
               if (_paymentStatus != 'pending' && _paymentStatus != 'approved')
                 ElevatedButton.icon(
                   onPressed: () {
@@ -2097,8 +2277,8 @@ class _ClientHomeState extends State<ClientHome> {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.payment),
-                  label: const Text("Pay Consultation Fee Now"),
+                  icon: Icon(Icons.payment),
+                  label: Text("Pay Consultation Fee Now"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
                     foregroundColor: Colors.white,
@@ -2109,21 +2289,21 @@ class _ClientHomeState extends State<ClientHome> {
                     ),
                   ),
                 ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               TextButton(
                 onPressed: () {
                   _showPaymentInstructions();
                 },
-                child: const Text("View Payment Instructions"),
+                child: Text("View Payment Instructions"),
               ),
               if (_paymentStatus == 'pending')
                 Padding(
                   padding: const EdgeInsets.only(top: 20),
                   child: Column(
                     children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 10),
-                      const Text(
+                      CircularProgressIndicator(),
+                      SizedBox(height: 10),
+                      Text(
                         "Waiting for admin approval...",
                         style: TextStyle(color: Colors.orange),
                       ),
@@ -2220,23 +2400,169 @@ class _ClientHomeState extends State<ClientHome> {
 
   // ================= CHAT HISTORY =================
   Widget _buildChatHistory() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.chat, size: 80, color: Colors.grey),
-          const SizedBox(height: 20),
-          const Text(
-            'Chat History',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+    final chatRequests = _myRequests
+        .where((req) =>
+            req['status'] == 'accepted' || req['status'] == 'completed')
+        .toList();
+
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.teal.shade400, Colors.teal.shade700],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
           ),
-          const SizedBox(height: 10),
-          const Text(
-            'Feature coming soon',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.chat, color: Colors.white, size: 30),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Chat History",
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          "${chatRequests.length} chat${chatRequests.length != 1 ? 's' : ''} found",
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: chatRequests.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.chat, size: 80, color: Colors.grey),
+                      SizedBox(height: 20),
+                      Text(
+                        "No chat history",
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        "Start chatting with lawyers to see history here",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: chatRequests.length,
+                  itemBuilder: (context, index) {
+                    final request = chatRequests[index];
+                    final lawyerId = request['assignedLawyerId'];
+                    final lawyerName = request['lawyerName'] ?? 'Unknown';
+                    final status = request['status'];
+                    final lastMessageTime =
+                        request['lastMessageTime'] as Timestamp?;
+
+                    return Card(
+                      elevation: 3,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        leading: CircleAvatar(
+                          radius: 25,
+                          backgroundColor: Colors.teal.shade100,
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.teal,
+                          ),
+                        ),
+                        title: Text(
+                          lawyerName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(height: 5),
+                            Text(
+                              status == 'accepted'
+                                  ? 'Active Chat'
+                                  : 'Completed Chat',
+                              style: TextStyle(
+                                color: status == 'accepted'
+                                    ? Colors.green
+                                    : Colors.grey,
+                              ),
+                            ),
+                            if (lastMessageTime != null)
+                              Text(
+                                _formatDate(lastMessageTime),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
+                        ),
+                        trailing: status == 'accepted'
+                            ? ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ClientChatScreen(
+                                        clientId: clientId,
+                                        lawyerId: lawyerId,
+                                        lawyerName: lawyerName,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.teal,
+                                ),
+                                child: Text(
+                                  'Open Chat',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              )
+                            : null,
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -2264,7 +2590,7 @@ class _ClientHomeState extends State<ClientHome> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "Payment History",
                 style: TextStyle(
                   fontSize: 24,
@@ -2272,7 +2598,7 @@ class _ClientHomeState extends State<ClientHome> {
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 5),
+              SizedBox(height: 5),
               Text(
                 "${_payments.length} payment${_payments.length != 1 ? 's' : ''} found",
                 style: TextStyle(
@@ -2285,9 +2611,9 @@ class _ClientHomeState extends State<ClientHome> {
                   padding: const EdgeInsets.only(top: 10),
                   child: Row(
                     children: [
-                      const Icon(Icons.verified, color: Colors.white, size: 20),
-                      const SizedBox(width: 5),
-                      const Text(
+                      Icon(Icons.verified, color: Colors.white, size: 20),
+                      SizedBox(width: 5),
+                      Text(
                         "Your payment is approved!",
                         style: TextStyle(
                           fontSize: 14,
@@ -2307,30 +2633,30 @@ class _ClientHomeState extends State<ClientHome> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.payment, size: 80, color: Colors.grey),
-                      const SizedBox(height: 20),
-                      const Text(
+                      Icon(Icons.payment, size: 80, color: Colors.grey),
+                      SizedBox(height: 20),
+                      Text(
                         "No payments yet",
                         style: TextStyle(
                           fontSize: 18,
                           color: Colors.grey,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      const Text(
+                      SizedBox(height: 10),
+                      Text(
                         "Pay consultation fee to get started",
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey,
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      SizedBox(height: 20),
                       ElevatedButton(
                         onPressed: _showPaymentDialog,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.teal,
                         ),
-                        child: const Text(
+                        child: Text(
                           'Make Payment',
                           style: TextStyle(color: Colors.white),
                         ),
@@ -2370,7 +2696,7 @@ class _ClientHomeState extends State<ClientHome> {
                                 children: [
                                   Text(
                                     'Payment ID: ${payment['paymentId']?.toString().substring(0, 8) ?? 'N/A'}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -2407,18 +2733,18 @@ class _ClientHomeState extends State<ClientHome> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 10),
+                              SizedBox(height: 10),
                               Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.attach_money,
                                     size: 16,
                                     color: Colors.green,
                                   ),
-                                  const SizedBox(width: 5),
+                                  SizedBox(width: 5),
                                   Text(
                                     'Amount: Rs. $amount',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.green,
@@ -2426,16 +2752,16 @@ class _ClientHomeState extends State<ClientHome> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 5),
+                              SizedBox(height: 5),
                               if (timestamp != null)
                                 Row(
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.calendar_today,
                                       size: 16,
                                       color: Colors.grey,
                                     ),
-                                    const SizedBox(width: 5),
+                                    SizedBox(width: 5),
                                     Text(
                                       'Submitted: ${_formatDate(timestamp)}',
                                       style: TextStyle(
@@ -2449,18 +2775,18 @@ class _ClientHomeState extends State<ClientHome> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const SizedBox(height: 5),
+                                    SizedBox(height: 5),
                                     Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.verified,
                                           size: 16,
                                           color: Colors.green,
                                         ),
-                                        const SizedBox(width: 5),
+                                        SizedBox(width: 5),
                                         Text(
                                           'Approved by: $approvedBy',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 14,
                                             color: Colors.green,
                                             fontWeight: FontWeight.bold,
@@ -2468,15 +2794,15 @@ class _ClientHomeState extends State<ClientHome> {
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 5),
+                                    SizedBox(height: 5),
                                     Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.calendar_today,
                                           size: 16,
                                           color: Colors.green,
                                         ),
-                                        const SizedBox(width: 5),
+                                        SizedBox(width: 5),
                                         Text(
                                           'Approved on: ${_formatDate(approvedAt)}',
                                           style: TextStyle(
@@ -2488,20 +2814,19 @@ class _ClientHomeState extends State<ClientHome> {
                                     ),
                                   ],
                                 ),
-                              if (status == 'rejected')
-                                const SizedBox(height: 5),
+                              if (status == 'rejected') SizedBox(height: 5),
                               if (status == 'rejected')
                                 Row(
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.cancel,
                                       size: 16,
                                       color: Colors.red,
                                     ),
-                                    const SizedBox(width: 5),
+                                    SizedBox(width: 5),
                                     Text(
                                       'Reason: ${payment['rejectionReason'] ?? 'Not specified'}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 14,
                                         color: Colors.red,
                                       ),
@@ -2527,7 +2852,7 @@ class _ClientHomeState extends State<ClientHome> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Settings',
             style: TextStyle(
               fontSize: 24,
@@ -2535,7 +2860,7 @@ class _ClientHomeState extends State<ClientHome> {
               color: Colors.teal,
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
@@ -2546,38 +2871,38 @@ class _ClientHomeState extends State<ClientHome> {
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.notifications),
-                    title: const Text('Push Notifications'),
+                    leading: Icon(Icons.notifications),
+                    title: Text('Push Notifications'),
                     trailing: Switch(
                       value: true,
                       onChanged: (value) {},
                     ),
                   ),
-                  const Divider(),
+                  Divider(),
                   ListTile(
-                    leading: const Icon(Icons.email),
-                    title: const Text('Email Notifications'),
+                    leading: Icon(Icons.email),
+                    title: Text('Email Notifications'),
                     trailing: Switch(
                       value: true,
                       onChanged: (value) {},
                     ),
                   ),
-                  const Divider(),
+                  Divider(),
                   ListTile(
-                    leading: const Icon(Icons.security),
-                    title: const Text('Privacy Settings'),
+                    leading: Icon(Icons.security),
+                    title: Text('Privacy Settings'),
                     onTap: () {},
                   ),
-                  const Divider(),
+                  Divider(),
                   ListTile(
-                    leading: const Icon(Icons.help),
-                    title: const Text('Help & Support'),
+                    leading: Icon(Icons.help),
+                    title: Text('Help & Support'),
                     onTap: () {},
                   ),
-                  const Divider(),
+                  Divider(),
                   ListTile(
-                    leading: const Icon(Icons.info),
-                    title: const Text('About App'),
+                    leading: Icon(Icons.info),
+                    title: Text('About App'),
                     onTap: () {},
                   ),
                 ],
@@ -2995,10 +3320,9 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
               Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 214, 234, 216),
+                  color: Color.fromARGB(255, 214, 234, 216),
                   borderRadius: BorderRadius.circular(10),
-                  border:
-                      Border.all(color: const Color.fromARGB(255, 12, 12, 12)!),
+                  border: Border.all(color: Color.fromARGB(255, 12, 12, 12)!),
                 ),
                 child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
